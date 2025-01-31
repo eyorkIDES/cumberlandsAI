@@ -1,6 +1,5 @@
 import streamlit as st
 import openai
-import logging
 import time
 
 
@@ -32,7 +31,6 @@ def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
                 )
                 print(f"Run completed in {formatted_elapsed_time}")
                 st.write(f"Run completed in {formatted_elapsed_time}")
-                logging.info(f"Run completed in {formatted_elapsed_time}")
                 # Get messages here once Run is completed!
                 messages = client.beta.threads.messages.list(thread_id=thread_id)
                 last_message = messages.data[0]
@@ -41,9 +39,7 @@ def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
                 st.write(f"Assistant Response: {response}")
                 break
         except Exception as e:
-            logging.error(f"An error occurred while retrieving the run: {e}")
             break
-        logging.info("Waiting for run to complete...")
         time.sleep(sleep_interval)
 
 

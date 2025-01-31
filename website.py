@@ -11,7 +11,6 @@ import time
 # Definitions
 assistant_id = "asst_YkgNKU6zP0LuzqwI9cAlP05t"
 thread_id= "thread_GB0cRlO0yillJVcYCxpL3uxj"
-client = openai.OpenAI(api_key="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")
 # If a question cannot be related to the university, respond with: 'I can only assist with topics related to the University of the Cumberlands.'
 
 def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
@@ -39,11 +38,14 @@ def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
                 st.write(f"Assistant Response: {response}")
                 break
         except Exception as e:
+            st.write(e)
             break
         time.sleep(sleep_interval)
 
 
 def send_message(message):
+    client = openai.OpenAI(api_key=user_api_key)
+    
     message = client.beta.threads.messages.create(
         thread_id=thread_id, role="user", content=message
     )
@@ -63,6 +65,7 @@ st.title("UC Chatbot Test Environment")
 st.write(thread_id)
 
 # Simple text input
+user_api_key = st.text_input("API Key:")
 message = st.text_input("Prompt:")
 
 # When the button is clicked...

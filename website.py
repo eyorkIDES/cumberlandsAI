@@ -1,73 +1,52 @@
 import streamlit as st
-import openai
-import time
+from openai import OpenAI
 
+# Show title and description.
+st.title("💬 UC AI Assistant")
+st.write("Ask anything to test the assistant's capabilities")
 
-# website.py
-# Ethan York
-# Innovative Deisng and Engineering Solutions
-# 1/25/2024
+# Ask user for their OpenAI API key via `st.text_input`.
+# Alternatively, you can store the API key in `./.streamlit/secrets.toml` and access it
+# via `st.secrets`, see https://docs.streamlit.io/develop/concepts/connections/secrets-management
+openai_api_key = st.secrets["DB_API_KEY"]
+if not openai_api_key:
+    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
+else:
 
-# Definitions
-assistant_id = "asst_YkgNKU6zP0LuzqwI9cAlP05t"
-thread_id= "thread_GB0cRlO0yillJVcYCxpL3uxj"
-# If a question cannot be related to the university, respond with: 'I can only assist with topics related to the University of the Cumberlands.'
+    # Create an OpenAI client.
+    client = OpenAI(api_key=openai_api_key)
 
-def wait_for_run_completion(client, thread_id, run_id, sleep_interval=5):
-    """
-    Waits for a run to complete and prints the elapsed time.:param client: The OpenAI client object.
-    :param thread_id: The ID of the thread.
-    :param run_id: The ID of the run.
-    :param sleep_interval: Time in seconds to wait between checks.
-    """
-    while True:
-        try:
-            run = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run_id)
-            if run.completed_at:
-                elapsed_time = run.completed_at - run.created_at
-                formatted_elapsed_time = time.strftime(
-                    "%H:%M:%S", time.gmtime(elapsed_time)
-                )
-                print(f"Run completed in {formatted_elapsed_time}")
-                st.write(f"Run completed in {formatted_elapsed_time}")
-                # Get messages here once Run is completed!
-                messages = client.beta.threads.messages.list(thread_id=thread_id)
-                last_message = messages.data[0]
-                response = last_message.content[0].text.value
-                print(f"Assistant Response: {response}")
-                st.write(f"Assistant Response: {response}")
-                break
-        except Exception as e:
-            st.write(e)
-            break
-        time.sleep(sleep_interval)
+    # Create a session state variable to store the chat messages. This ensures that the
+    # messages persist across reruns.
+    if "messages" not in st.session_state:
+        st.session_state.messages = []
 
+    # Display the existing chat messages via `st.chat_message`.
+    for message in st.session_state.messages:
+        with st.chat_message(message["role"]):
+            st.markdown(message["content"])
 
-def send_message(message):
-    client = openai.OpenAI(api_key=user_api_key)
-    
-    message = client.beta.threads.messages.create(
-        thread_id=thread_id, role="user", content=message
-    )
+    # Create a chat input field to allow the user to enter a message. This will display
+    # automatically at the bottom of the page.
+    if prompt := st.chat_input("What is up?"):
 
-    # == Run the Assistant
-    run = client.beta.threads.runs.create(
-        thread_id=thread_id,
-        assistant_id=assistant_id,
-        instructions="",
-    )
+        # Store and display the current prompt.
+        st.session_state.messages.append({"role": "user", "content": prompt})
+        with st.chat_message("user"):
+            st.markdown(prompt)
 
-    # == Run it
-    wait_for_run_completion(client=client, thread_id=thread_id, run_id=run.id)
+        # Generate a response using the OpenAI API.
+        stream = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": m["role"], "content": m["content"]}
+                for m in st.session_state.messages
+            ],
+            stream=True,
+        )
 
-# Title
-st.title("UC Chatbot Test Environment")
-st.write(thread_id)
-
-# Simple text input
-user_api_key = st.text_input("API Key:")
-message = st.text_input("Prompt:")
-
-# When the button is clicked...
-if st.button("Submit"):
-    send_message(message)
+        # Stream the response to the chat using `st.write_stream`, then store it in 
+        # session state.
+        with st.chat_message("assistant"):
+            response = st.write_stream(stream)
+        st.session_state.messages.append({"role": "assistant", "content": response})

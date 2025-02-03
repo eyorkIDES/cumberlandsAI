@@ -4,16 +4,22 @@ import time
 
 # Assistant and Thread Configuration
 assistant_id = "asst_YkgNKU6zP0LuzqwI9cAlP05t"
+openai_api_key = st.secrets["DB_API_KEY"]
 
 # Show title and description.
 st.title("💬 UC AI Assistant")
 st.write("Ask anything to test the assistant's capabilities")
 
-# Ask user for their OpenAI API key
-openai_api_key = st.secrets["DB_API_KEY"]
-if not openai_api_key:
-    st.info("Please add your OpenAI API key to continue.", icon="🗝️")
+# Password Authentication
+placeholder = st.empty()  # Create a placeholder
+# Display an element inside the placeholder
+with placeholder:
+    password = st.text_input("Password:", type="password")
+
+if password != "ides2025":
+    st.info("Please enter password to access chatbot", icon="🗝️")
 else:
+    placeholder.empty()  # Remove the element
     # Create an OpenAI client
     client = OpenAI(api_key=openai_api_key)
 

@@ -28,7 +28,7 @@ placeholder = st.empty()  # Create a placeholder
 with placeholder:
     password = st.text_input("Password:", type="password")
 
-if password != "ides2025":
+if password != "patriots":
     st.info("Please enter password to access chatbot", icon="🗝️")
 else:
     placeholder.empty()  # Remove the element

@@ -2,9 +2,11 @@ import streamlit as st
 from openai import OpenAI
 import time
 
-# Assistant and Thread Configuration
-assistant_id = "asst_YkgNKU6zP0LuzqwI9cAlP05t"
 openai_api_key = st.secrets["DB_API_KEY"]
+instructions = """
+You are a helpful assistant for the University of the Cumberlands. Base your answers on the provided documents as closely as possible. You shall assume that questions are related to the university and address them accordingly. 
+If a question cannot be interpreted as related to the university, simply tell the user: 'I'm sorry, I can only answer questions related to the University of the Cumberlands.' Do not reference the fact that you have been provided documents.
+"""
 
 # Set tab name (title) and favicon
 st.set_page_config(
@@ -32,55 +34,34 @@ if password != "patriots":
     st.info("Please enter password to access chatbot", icon="🗝️")
 else:
     placeholder.empty()  # Remove the element
-    # Create an OpenAI client
+    # Create OpenAI client
     client = OpenAI(api_key=openai_api_key)
 
-    # Ensure we have a thread ID in session state
-    if "thread_id" not in st.session_state:
-        thread = client.beta.threads.create()  # Create a new thread
-        st.session_state.thread_id = thread.id
+    # Get user input
+    user_question = st.text_input("Ask a question:", key="question")
 
-    thread_id = st.session_state.thread_id
+    if st.button("Get Answer") and user_question:
+        with st.spinner("Thinking..."):
+            try:
+                # Generate response using OpenAI API
+                response = client.responses.create(
+                    model="gpt-4o-mini",
+                    instructions=instructions,
+                    input=user_question,
+                    tools=[{"type": "file_search", "vector_store_ids": ["vs_67d23eb9bbec819195047e9192b49cc5"]}]
+                )
 
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+                # Iterate and find the message response
+                assistant_response = next(
+                    (item.content[0].text for item in response.output if hasattr(item, 'content') and item.content),
+                    None
+                )
 
-    # Display previous chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
-
-    # Chat input for user
-    if prompt := st.chat_input("What is up?"):
-        # Store user message in chat history
-        st.session_state.messages.append({"role": "user", "content": prompt})
-        with st.chat_message("user"):
-            st.markdown(prompt)
-
-        # Send message to OpenAI Assistant Thread
-        client.beta.threads.messages.create(
-            thread_id=thread_id, role="user", content=prompt
-        )
-
-        # Run the assistant
-        run = client.beta.threads.runs.create(thread_id=thread_id, assistant_id=assistant_id)
-
-        # Polling loop: Wait for completion
-        while True:
-            run_status = client.beta.threads.runs.retrieve(thread_id=thread_id, run_id=run.id)
-            if run_status.status == "completed":
-                break
-            time.sleep(2)  # Wait before checking again
-
-        # Retrieve assistant response
-        messages = client.beta.threads.messages.list(thread_id=thread_id)
-        last_message = messages.data[0]  # Get the latest assistant message
-        response = last_message.content[0].text.value
-
-        # Display assistant response
-        with st.chat_message("assistant"):
-            st.markdown(response)
-
-        # Store assistant response in chat history
-        st.session_state.messages.append({"role": "assistant", "content": response})
+                if assistant_response:
+                    st.subheader("Answer:")
+                    st.write(assistant_response)
+                else:
+                    st.error("No valid response found. Please try again.")
+            
+            except Exception as e:
+                st.error(f"Error: {e}")

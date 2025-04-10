@@ -2,116 +2,112 @@ import streamlit as st
 from openai import OpenAI
 import time
 
-# Assistant and Thread Configuration
+# --- Config ---
 assistant_id = "asst_YkgNKU6zP0LuzqwI9cAlP05t"
 openai_api_key = st.secrets["DB_API_KEY"]
 
-# Set tab name (title) and favicon
+# --- Streamlit Page Setup ---
 st.set_page_config(
-    page_title="UC AI Assistant",  # This sets the tab name
-    page_icon="favicon.png",  # This sets the favicon (must be a local file or URL)
+    page_title="UC AI Assistant",
+    page_icon="favicon.png",
 )
 
-# Create banner layout
-col1, col2 = st.columns([1, 2])  # Adjust ratio for image and text
-
+# --- Header with Logo ---
+col1, col2 = st.columns([1, 2])
 with col1:
-    st.image("logo.webp", width=1500)  # Display image
+    st.image("logo.webp", width=1500)
+st.title("AI Assistant")
+st.write("Ask anything to test the assistant's capabilities")
 
-st.title("AI Assistant")  # Assistant title
-
-st.write("Ask anything to test the assistant's capabilities")  # Description text
-
-# Password Authentication
-placeholder = st.empty()  # Create a placeholder
-# Display an element inside the placeholder
+# --- Password Protection ---
+placeholder = st.empty()
 with placeholder:
     password = st.text_input("Password:", type="password")
 
 if password != "patriots":
-    st.info("Please enter password to access chatbot", icon="🗝️")
+    st.info("Please enter password to access chatbot")
+    st.stop()
 else:
-    placeholder.empty()  # Remove the element
-    # Create an OpenAI client
-    client = OpenAI(api_key=openai_api_key)
+    placeholder.empty()
 
-    # Ensure we have a thread ID in session state
-    if "thread_id" not in st.session_state:
-        thread = client.beta.threads.create()  # Create a new thread
-        st.session_state.thread_id = thread.id
+# --- Initialize OpenAI Client ---
+client = OpenAI(api_key=openai_api_key)
 
-    thread_id = st.session_state.thread_id
+# --- Session Setup ---
+if "thread_id" not in st.session_state:
+    thread = client.beta.threads.create()
+    st.session_state.thread_id = thread.id
 
-    # Initialize chat history
-    if "messages" not in st.session_state:
-        st.session_state.messages = []
+if "messages" not in st.session_state:
+    st.session_state.messages = []
 
-    # Display previous chat messages
-    for message in st.session_state.messages:
-        with st.chat_message(message["role"]):
-            st.markdown(message["content"])
+# --- Display Chat History ---
+for message in st.session_state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-    # Chat input for user
-    if prompt := st.chat_input("How can I help?"):
-        # Save user message to history
-        st.session_state.messages.append({"role": "user", "content": prompt})
+# --- Chat Input ---
+if prompt := st.chat_input("How can I help?"):
+    # Show user's message
+    st.session_state.messages.append({"role": "user", "content": prompt})
+    with st.chat_message("user"):
+        st.markdown(prompt)
 
-        with st.chat_message("user"):
-            st.markdown(prompt)
+    # Add message to thread
+    client.beta.threads.messages.create(
+        thread_id=st.session_state.thread_id,
+        role="user",
+        content=prompt,
+    )
 
-        # Send user message to Assistant
-        client.beta.threads.messages.create(
-            thread_id=thread_id, role="user", content=prompt
-        )
+    # Placeholder for assistant response
+    with st.chat_message("assistant"):
+        stream_area = st.empty()
+        full_response = ""
 
-        # Run assistant
-        run = client.beta.threads.runs.create(
-            thread_id=thread_id,
+        # Start assistant run with streaming
+        stream = client.beta.threads.runs.create(
+            thread_id=st.session_state.thread_id,
             assistant_id=assistant_id,
+            stream=True,
         )
 
-        # Reserve placeholder for assistant response
-        assistant_placeholder = st.chat_message("assistant")
-        response_container = assistant_placeholder.empty()
+        annotations = []
+        for event in stream:
+            if event.event == "thread.message.delta":
+                delta = event.data.delta
+                if delta.content and len(delta.content) > 0:
+                    part = delta.content[0].text.value
+                    full_response += part
+                    stream_area.markdown(full_response)
+                if delta.content and delta.content[0].text.annotations:
+                    annotations.extend(delta.content[0].text.annotations)
 
-        with response_container:
-            with st.spinner("Typing..."):
-                # Poll until run is completed
-                while True:
-                    run_status = client.beta.threads.runs.retrieve(
-                        thread_id=thread_id, run_id=run.id
-                    )
-                    if run_status.status == "completed":
-                        break
-                    time.sleep(2)
-
-        # Retrieve the latest message
-        messages = client.beta.threads.messages.list(thread_id=thread_id)
-        last_message = messages.data[0]
-        text_obj = last_message.content[0].text
-        raw_response = text_obj.value
-        annotations = text_obj.annotations
-
-        # Clean citations
-        clean_response = raw_response
+        # Clean Response
+        clean_response = full_response
         references = ""
         for ann in annotations:
             if ann.type == "file_citation":
                 clean_response = clean_response.replace(ann.text, "")
+
+        # Add Sources
+        seen_files = set()
         for i, ann in enumerate(annotations):
             if ann.type == "file_citation":
                 citation = ann.file_citation
-                file_id = citation.file_id
-                file_obj = client.files.retrieve(file_id)
-                file_name = file_obj.filename
-                references += f"[{i + 1}] {file_name}  \n"
-
+                if citation.file_id not in seen_files:
+                    file_obj = client.files.retrieve(citation.file_id)
+                    references += f"[{len(seen_files) + 1}] {file_obj.filename}  \n"
+                    seen_files.add(citation.file_id)
         final_response = clean_response
         if references:
-            final_response += "\n\nSource:\n" + references
+            final_response += "\n\nSource: \n" + references
 
-        # Replace spinner with assistant message
-        response_container.markdown(final_response)
+        # Update stream area with cleaned output
+        stream_area.markdown(final_response)
 
-        # Save assistant response to chat history
-        st.session_state.messages.append({"role": "assistant", "content": final_response})
+        # Save to history
+        st.session_state.messages.append({
+            "role": "assistant",
+            "content": final_response
+        })

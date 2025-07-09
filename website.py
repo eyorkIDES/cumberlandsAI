@@ -1,25 +1,18 @@
 import streamlit as st
 from openai import OpenAI
-import time
 
-# --- Config ---
+# Config
 assistant_id = "asst_YkgNKU6zP0LuzqwI9cAlP05t"
 openai_api_key = st.secrets["DB_API_KEY"]
+st.set_page_config(page_title="UC AI Assistant", page_icon="favicon.png")
 
-# --- Streamlit Page Setup ---
-st.set_page_config(
-    page_title="UC AI Assistant",
-    page_icon="favicon.png",
-)
-
-# --- Header with Logo ---
+# Header
 col1, col2 = st.columns([1, 2])
 with col1:
     st.image("logo.webp", width=1500)
 st.title("AI Assistant")
-st.write("Ask anything to test the assistant's capabilities")
 
-# --- Password Protection ---
+# Password
 placeholder = st.empty()
 with placeholder:
     password = st.text_input("Password:", type="password")
@@ -29,11 +22,10 @@ if password != "patriots":
     st.stop()
 else:
     placeholder.empty()
+    st.caption("ℹ️ ChatBot can make mistakes. Please refer to official university channels for confirmation.")
 
-# --- Initialize OpenAI Client ---
+# Session Setup
 client = OpenAI(api_key=openai_api_key)
-
-# --- Session Setup ---
 if "thread_id" not in st.session_state:
     thread = client.beta.threads.create()
     st.session_state.thread_id = thread.id
@@ -41,38 +33,28 @@ if "thread_id" not in st.session_state:
 if "messages" not in st.session_state:
     st.session_state.messages = []
 
-# --- Display Chat History ---
+# Display Chat History
 for message in st.session_state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
-# --- Chat Input ---
+# Chat Input
 if prompt := st.chat_input("How can I help?"):
     # Show user's message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
         st.markdown(prompt)
-
     # Add message to thread
-    client.beta.threads.messages.create(
-        thread_id=st.session_state.thread_id,
-        role="user",
-        content=prompt,
-    )
+    client.beta.threads.messages.create(thread_id=st.session_state.thread_id, role="user", content=prompt)
 
     # Placeholder for assistant response
     with st.chat_message("assistant"):
         stream_area = st.empty()
         full_response = ""
 
-        # Start assistant run with streaming
-        stream = client.beta.threads.runs.create(
-            thread_id=st.session_state.thread_id,
-            assistant_id=assistant_id,
-            stream=True,
-        )
-
+        # Start assistant run with streaming'
         annotations = []
+        stream = client.beta.threads.runs.create(thread_id=st.session_state.thread_id, assistant_id=assistant_id, stream=True)
         for event in stream:
             if event.event == "thread.message.delta":
                 delta = event.data.delta
@@ -90,7 +72,7 @@ if prompt := st.chat_input("How can I help?"):
             if ann.type == "file_citation":
                 clean_response = clean_response.replace(ann.text, "")
 
-        # Add Sources
+        # Add Sources to End
         seen_files = set()
         for i, ann in enumerate(annotations):
             if ann.type == "file_citation":
